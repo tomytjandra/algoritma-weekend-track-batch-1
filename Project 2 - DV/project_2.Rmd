@@ -1,0 +1,238 @@
+---
+title: "Data Visualization - Binus University"
+author: "Even Yosua,  Handoyo Sjarif, Ridan Lukita, Tomy Tjandra"
+date: "May 2018"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: 
+        collapsed: false
+    number_sections: false
+    theme: flatly
+    highlight: tango
+  fig_caption: yes
+  pdf_document:
+    latex_engine: xelatex
+    fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Getting Started {.tabset}
+Hello again! This is the result of our second project. This time, we are interested to analyze about the Balance of Trade for ASEAN countries and then visualize it with the help of ggplot library. 
+  
+[Balance of Trade (BOT)](https://www.thebalance.com/balance-of-trade-definition-favorable-vs-unfavorable-3306261) is the value of a country's exports minus its imports. When exports are larger than imports, it's a trade surplus. Most nations view that as a favorable trade balance. When exports are less than imports, it's a trade deficit. Countries usually regard that as an unfavorable trade balance.  
+  
+By the end of this project, we will know which country in ASEAN that have the most and least favorable trade balance for a specific year and also the commodities which contribute the most.
+
+##Import library
+First of all, we have to import a couple of library that we use for this project. 
+```{r message=FALSE}
+library(ggplot2)
+library(GGally)
+library(ggthemes)
+library(ggrepel)
+library(ggpubr)
+```
+
+##Load csv
+We load our dataset in CSV format which is downloaded from [Kaggle](https://www.kaggle.com/unitednations/global-commodity-trade-statistics). This dataset contains the data of flow of goods that happened around the world since 1988 until 2016, but it is a very large dataset containing 8 million rows of data (around 1 GB size). In order to speed up the process of loading the dataset, we have subsetted the original dataset (and export it in the form of CSV file) so that it's only containing the data for ASEAN countries.
+
+```{r eval=FALSE}
+#The "commodity_trade_statistics_data.csv" file is not available in the folder because the size is too large
+commodity <- read.csv("commodity_trade_statistics_data.csv")
+asean_countries <- c("Indonesia","Malaysia","Singapore","Thailand","Philippines","Vietnam","Myanmar","Cambodia","Lao People's Dem. Rep.","Brunei Darussalam")
+asean_commodity <- commodity[commodity$country_or_area %in% asean_countries,]
+write.csv(asean_commodity,file="asean_commodity_trade_statistics_data.csv")
+```
+
+Then, we import the subsetted dataset from the original one.
+
+```{r}
+asean.comm <- read.csv("asean_commodity_trade_statistics_data.csv")
+```
+
+#About the data
+Let's us see the structure of our raw dataset by using str(data.frame) function.
+```{r}
+str(asean.comm)
+```
+It contains `r nrow(asean.comm)` rows by `r ncol(asean.comm)` columns of data. Also, we can see the complete summary of our dataset by using summary(data.frame) function. This automatically produce statistical observation for numerical data type and row count for categorical data type.
+```{r}
+summary(asean.comm)
+```
+
+#Step 1: Data Cleansing and Data Preparation
+##Delete unuseful columns
+We are going to drop columns that we don't use in order to make our analysis more efficient. Column 1 and 4 contain the row number and commodity code. 
+```{r}
+asean.comm <- asean.comm[,-c(1, 4)]
+```
+
+##Delete all_commodities category
+This dataset contains all_commodities category which will hinder our result since this category is representing the total amount of commodities for that country. So, we are only interested in analyzing the category which is not belong to the all_commodities category.
+```{r}
+asean.comm <- asean.comm[asean.comm$category != "all_commodities",]
+```
+
+##Separate Export and Import
+Here, we subset the data for export and import into a separate data frames based on "flow" column (which are defined by Export and Import). 
+
+```{r}
+export <- asean.comm[asean.comm$flow == "Export",]
+import <- asean.comm[asean.comm$flow == "Import",]
+reexport <- asean.comm[asean.comm$flow == "Re-Export",]
+reimport <- asean.comm[asean.comm$flow == "Re-Import",]
+```
+
+#Step 2: Plot the Whole Data
+We will see the trade flow of ASEAN countries from 1988 to 2016. All of the trade is based on USD (in million). 
+```{r}
+  ggplot(asean.comm, aes(x=year, y=trade_usd/1000000, color=country_or_area))+
+  geom_point()+
+  facet_wrap(~as.factor(flow), ncol=2)+
+  scale_size(range=c(1,30))+
+  theme(legend.position = "right", strip.text=element_text(size=5))+
+  labs(title="ASEAN Countries Trade Flow (1988-2016)", x="Year", y="Trade USD (in million USD)")
+```
+
+#Step 3: Summing trade_usd export and import per year for every country
+Next, we sum the trade_usd of export and import per year for every country. So we can know how much USD they gain (by exporting) or lose (by importing) for each year. 
+```{r}
+import.sum <- aggregate.data.frame(import$trade_usd, by = list(import$year, import$country_or_area), sum)
+names(import.sum) <- c("Year", "Country", "Trade_USD_Import")
+
+export.sum <- aggregate.data.frame(export$trade_usd, by = list(export$year, export$country_or_area), sum)
+names(export.sum) <- c("Year", "Country", "Trade_USD_Export")
+
+reimport.sum <- aggregate.data.frame(reimport$trade_usd, by = list(reimport$year, reimport$country_or_area), sum)
+names(reimport.sum) <- c("Year", "Country", "Trade_USD_Re_Import")
+
+reexport.sum <- aggregate.data.frame(reexport$trade_usd, by = list(reexport$year, reexport$country_or_area), sum)
+names(reexport.sum) <- c("Year", "Country", "Trade_USD_Re_Export")
+```
+
+##Import
+```{r}
+ggplot(import.sum, aes(x=Year, y=Trade_USD_Import/1000000, color=Country))+
+  geom_point()+
+  labs(title="ASEAN Countries Total Import (1988-2016)", y="Trade USD (in million USD)")
+```
+
+##Export 
+```{r}
+ggplot(export.sum, aes(x=Year, y=Trade_USD_Export/1000000, color=Country))+
+  geom_point()+
+  labs(title="ASEAN Countries Total Export (1988-2016)", y="Trade USD (in million USD)")
+```
+
+##Re-Import 
+```{r}
+ggplot(reimport.sum, aes(x=Year, y=Trade_USD_Re_Import/1000000, color=Country))+
+  geom_point()+
+  labs(title="ASEAN Countries Total Re-Import (1988-2016)", y="Trade USD (in million USD)")
+```
+
+##Re-Export 
+```{r}
+ggplot(reexport.sum, aes(x=Year, y=Trade_USD_Re_Export/1000000, color=Country))+
+  geom_point()+
+  labs(title="ASEAN Countries Total Re-Export (1988-2016)", y="Trade USD (in million USD)")
+```
+
+#Step 4: Create a single data frame containing BOT
+We have to join both of our data frames (from Step 2) so that we get a single data frame with column: Year, Country, Trade USD Import, Export, Re-Import, Re-Export, and BOT. BOT is calculated by subtracting sum of import and re-import from the sum of export and re-export.
+```{r}
+import.export.sum <- merge(import.sum, export.sum, by=c("Year", "Country"), all = TRUE)
+reimport.reexport.sum <- merge(reimport.sum, reexport.sum, by=c("Year", "Country"), all = TRUE)
+flow.sum <- merge(import.export.sum, reimport.reexport.sum, by=c("Year", "Country"), all = TRUE)
+
+flow.sum[is.na(flow.sum)] <- 0
+Balance_Of_Trade <- flow.sum$Trade_USD_Export+flow.sum$Trade_USD_Re_Export-flow.sum$Trade_USD_Import-flow.sum$Trade_USD_Re_Import
+flow.sum <- cbind(flow.sum, Balance_Of_Trade)
+```
+
+#Step 5: Plotting the BOT
+Before we plot the BOT, we have to find out the most extreme values of BOT (min and max). Both of the values will be useful to plot the annotation on the BOT plot. 
+```{r}
+highest.balance <- max(flow.sum$Balance_Of_Trade)
+lowest.balance <- min(flow.sum$Balance_Of_Trade)
+extreme.balance <- c(highest.balance, lowest.balance)
+```
+
+This is the BOT plot.  
+```{r}
+ggplot(flow.sum, aes(x=Year, y=Balance_Of_Trade / 1000000, color=Country))+
+  geom_hline(yintercept=0, alpha=0.5)+
+  geom_point()+
+  geom_label_repel(aes(label=ifelse(Balance_Of_Trade %in% extreme.balance, paste(Country, Year, "(", Balance_Of_Trade,"USD )"), "")), size=3, box.padding = 2)+
+  labs(title="ASEAN Countries Balance of Trade (1988-2016)", y="Trade USD (in million USD)")
+```
+The BOT plot above shows that:  
+* The highest BOT belongs to Singapore in 2011 with 24,980,970,850 USD  
+* The lowest BOT belongs to Malaysia in 2012 with -18,051,536,915 USD  
+
+In addition, here we present the top 6 of the highest and lowest BOT.
+
+##The Highest BOT 
+```{r}
+temp1 <- flow.sum[order(flow.sum$Balance_Of_Trade, decreasing = T), ] 
+head(temp1)
+```
+##The Lowest BOT
+```{r}
+temp2 <- flow.sum[order(flow.sum$Balance_Of_Trade, decreasing = F), ] 
+head(temp2)
+```
+
+For the next step, we are interested to see why this happened.
+
+#Step 6: Analyzing the Highest and Lowest BOT
+In order to know the reason why they have the lowest and highest BOT, we need to see what commodities does Malaysia import in 2012 (lowest BOT) and what commodities does Singapore export in 2011 (highest BOT). 
+
+First, we create new data frame for Singapore's export in 2011 and Malaysia's import in 2012. Then, we get the top 6 for each data frame.
+```{r}
+export.sg2011 <- export[export$country_or_area == "Singapore" & export$year == 2011,]
+import.my2012 <- import[import$country_or_area == "Malaysia" & import$year == 2012,]
+
+top6export.sg2011 <- head(export.sg2011[order(export.sg2011$trade_usd, decreasing = T),])
+top6import.my2012 <- head(import.my2012[order(import.my2012$trade_usd, decreasing = T),])
+```
+
+##Plotting the Top Exported/Imported Commodity
+Plotting the Singapore's export in 2011 by each top 6 exported commodity (by its trade_usd).
+```{r}
+ggplot(top6export.sg2011, aes(x=reorder(commodity, trade_usd), y=trade_usd/1000000))+
+  geom_col(fill="goldenrod4")+
+  coord_flip()+
+  labs(title="Top 6 Exported Commodity\nby Singapore in 2011", x="Commodity", y="Trade USD (in million USD)")
+```
+
+But the most USD gain due to commodity export by Singapore in 2011 is an unspecified commodity. Therefore, we compare the next top 5.
+
+```{r}
+ggplot(top6export.sg2011[-1,], aes(x=reorder(commodity, trade_usd), y=trade_usd/1000000))+
+  geom_col(fill="goldenrod4")+
+  coord_flip()+
+  labs(title="Top 5 Exported Commodity\nby Singapore in 2011", subtitle="Excluding unspecified commodity", x="Commodity", y="Trade USD (in million USD)")
+```
+
+Next, plotting the Malaysia's import in 2012 by top 6 imported commodity (by its trade_usd).
+
+```{r}
+ggplot(top6import.my2012, aes(x=reorder(commodity, trade_usd), y=trade_usd/1000000))+
+  geom_col(fill="goldenrod4")+
+  coord_flip()+
+  labs(title="Top 6 Imported Commodity\nby Malaysia in 2012", x="Commodity", y="Trade USD (in million USD)")
+```
+
+#Result 
+From the plot above, we can easily know the reason why Malaysia in 2012 have the lowest balance (-18,051,536,915 USD) with total import 20,930,062,818 USD and the export only 2,878,718,604 USD. This happens due to the fact that Malaysia imported Oils petroleum commodity very much which makes up ~75% of Malaysia's total import in 2012 at staggering 15,596,176,888 USD.  
+
+On the other hand, as for the highest balance, we don't really know for sure from the most exported commodities plot (because of the unspecified commodity). But we know the second most exported is the animal feed preparation.
+
+###No Pain No Gain
+-- Good bye and see you again --

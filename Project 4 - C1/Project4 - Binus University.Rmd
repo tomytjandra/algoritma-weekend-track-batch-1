@@ -1,0 +1,281 @@
+---
+title: "Algoritma Academy: Team BINUS University"
+author: "Even Yosua,  Handoyo Sjarif, Ridan Lukita, Tomy Tjandra"
+date: "May 2018"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: 
+        collapsed: false
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    css: style.css
+  fig_caption: yes
+  pdf_document:
+    latex_engine: xelatex
+    fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Getting started
+
+Hello again! This is the result of our final project which covers about Classification in Machine Learning (using Logistic Regression and K-Nearest Neighbors algorithm). We use 'wholesale.csv' as our dataset to be analyzed, then classify to which industry/channel does the customer belong if they buy a certain number of 'fresh', 'milk', 'grocery', 'frozen', 'detergents_paper', 'delicassen' products. In this dataset, the target variable is binary: 'horeca' (hotel, restaurant, cafe) or 'retail'. Here, we are interested to compare the performance between KNN Algorithm and Logistic Regression.
+
+## Import library
+
+Firstly, as usual, we have to import some library that we'll use in building this project.
+```{r message=FALSE}
+library(dplyr)
+library(grid)
+library(gtools)
+library(class)
+library(gmodels)
+library(car)
+library(ROCR)
+```
+
+## Data Preparation
+
+We import our 'wholesale.csv' dataset and drop the second column, which is 'region', since we would like to analyze our data as a whole (not segmented by the region).
+```{r}
+wholesale <- read.csv("data_input/wholesale.csv", header=TRUE)
+wholesale <- wholesale[,-2]
+```
+
+Then we replace the values in first column, which is 'channel', into new column 'industry':  
+Replace 1 into horeca (hotel, restaurant, cafe)  
+Replace 2 into retail
+```{r}
+wholesale$Industry <- factor(wholesale$Channel, levels = c(1, 2), labels = c("horeca", "retail"))
+
+# After the replacement, we can remove the original Channel feature
+wholesale <- wholesale[,-1]
+prop.table(table(wholesale$Industry))
+```
+We can immediately analyze our dataset, since the proportion is quite balanced (67.73% horeca and 32.27% retail).
+
+# K-Nearest Neighbors Algorithm
+
+## Scaling Data
+
+We have to scale down our data by normalizing it to Z-score, so that each independent variables have an equal amount of weight.
+```{r}
+wholesale.z <- as.data.frame(scale(wholesale[,-7]))
+summary(wholesale.z)
+```
+
+Bind the normalized data with the 'industry' column
+```{r}
+wholesale.n <- as.data.frame(cbind(wholesale.z, Industry = wholesale$Industry))
+```
+
+## Splitting Data
+
+In this step, we are going to split our dataset into two separate sets:  
+1. Training Data, which will be used to build the model.  
+2. Testing Data, which will be used to test and evaluate our model.
+  
+Before splitting the data, we have to randomize our row by sample() function so that the pattern in the 'industry' column can be scattered out.
+```{r}
+set.seed(10)
+wholesale.n <- wholesale.n[sample(nrow(wholesale.n)), ]
+```
+
+Ideally, 80% of the data (352 rows in this case) will become the training data and the rest 20% will become the testing data (88 rows in this case).
+```{r}
+wholesale_train <- wholesale.n[1:352, ]
+wholesale_test <- wholesale.n[353:440, ]
+wholesale_train_labels <- wholesale.n[1:352, 7]
+prop.table(table(wholesale_train$Industry))
+```
+After we randomize and take 80% of the data to be the training data, it turns out the proportion of the target variable is still quite balanced. We are going to use this data as our training data for building model using Logistic Regression and KNN Algorithm.
+
+## Value of K
+
+The appropriate value of k-neighbors must be an odd integer, so that the model can always determine the most voted class, and should be around square root of the number of observations.
+```{r}
+sqrt(nrow(wholesale_train))
+```
+Round to the nearest odd integer, we get k=19.
+
+## Apply KNN Algorithm
+
+We call the function knn() to apply the KNN algorithm.
+```{r}
+industry_pred_knn <- knn(train=wholesale_train[ ,1:6], test=wholesale_test[ ,1:6], cl=wholesale_train_labels, k=19)
+```
+
+## Cross Tabulation
+
+Then we create a cross tabulation to see how many of the testing data are being classify correctly and incorrectly.
+```{r}
+ct_knn <- CrossTable(x=wholesale_test[,7], y=industry_pred_knn, dnn=c("actual", "prediction"))
+ct_knn
+```
+
+## Model Evaluation
+
+Lastly, we evaluate our model using the table above by its accuracy, recall, precision, and specificity.
+```{r}
+TP <- ct_knn$t[1]
+FP <- ct_knn$t[2]
+FN <- ct_knn$t[3]
+TN <- ct_knn$t[4]
+total <- sum(ct_knn$t)
+
+acc_knn <- (TN+TP)/total
+rec_knn <- TP/(TP+FN)
+prec_knn <- TP/(TP+FP)
+spec_knn <- TN/(TN+FP)
+
+eval_knn <- data.frame(Method = "KNN",
+                       Accuracy = round(acc_knn,5),
+                       Recall = round(rec_knn,5),
+                       Precision = round(prec_knn,5),
+                       Specificity = round(spec_knn,5))
+eval_knn
+```
+
+
+# Logistic Regression
+
+## Splitting Data
+
+For logistic regression, we have to use the same training and testing data as KNN Algorithm used in order to achieve a fair analysis.
+```{r message=FALSE}
+wholesale_train #as the training data
+wholesale_test #as the testing data
+```
+
+## Model
+
+We call the function glm() and family="binomial" to build the logistic regression model.
+```{r}
+industry_pred_lrm <- glm(Industry ~ Fresh + Milk + Grocery + Frozen + Detergents_Paper + Delicassen, wholesale_train, family="binomial")
+
+industry_pred_lrm <- glm(Industry ~ Fresh + Milk + Grocery + Frozen + Delicassen, wholesale_train, family="binomial")
+summary(industry_pred_lrm)
+
+step(glm(Industry ~ ., wholesale_train, family="binomial"))
+```
+
+## Coefficient Interpretation
+
+From the previous summary, we can interpret the meaning of the coefficients.
+```{r}
+coefs <- industry_pred_lrm$coefficients
+coefs
+```
+Positive coefficient means increase in variable will increase the probability that the data will be classified as retail (since odds > 1). While on the other hand, negative coefficient means increase in variable will decrease the probability that the data will be classified as retail (since 0 < odds < 1).
+
+In this case:  
+As we increase the value of 'fresh', 'milk', 'grocery' or 'detegents_paper', the probability will also increase.  
+As we increase the value of 'frozen' or 'delicaseen', the probability will decrease.
+
+Intercept (beta0) tells us the logit value when all independent variables are set to be 0. We try calculate the initial probability, which is 41.49818%.
+```{r}
+beta0 <- coefs[1]
+odds <- exp(beta0)
+odds/(1+odds)
+```
+
+## Check Multicolinearity
+
+High multicolinearity indicates a high dependencies between the independent variables. We expect our data to have little to no multicolinearity.
+```{r}
+vif(industry_pred_lrm)
+```
+It turns out that there is a little multicolinearity in our training data (about 1), which is great.
+
+## Predict
+
+We predict the label of our testing data by using the logistic regression model developed in previous step.
+```{r}
+wholesale_test$pred <- predict(industry_pred_lrm, wholesale_test, type = "response") #output: probability
+```
+
+## Set Threshold
+
+In this step, we have to do the trial-and-error method in determining the threshold value in order to achieve good-fit model (not overfitted or underfitted).
+```{r}
+threshold <- 0.65
+wholesale_test$pred <- ifelse(wholesale_test$pred<=threshold,"horeca","retail")
+```
+
+## Cross Tabulation
+
+Then we create a cross tabulation to see how many of the testing data are being classify correctly and incorrectly.
+```{r}
+ct_lr <- CrossTable(x=wholesale_test[,7], y=wholesale_test$pred, dnn=c("actual", "prediction"))
+ct_lr
+```
+
+## Model Evaluation
+
+Lastly, we evaluate our model using the table above by its accuracy, recall, precision, and specificity.
+```{r}
+TP <- ct_lr$t[1]
+FP <- ct_lr$t[2]
+FN <- ct_lr$t[3]
+TN <- ct_lr$t[4]
+total <- sum(ct_lr$t)
+
+acc_lr <- (TN+TP)/total
+rec_lr <- TP/(TP+FN)
+prec_lr <- TP/(TP+FP)
+spec_lr <- TN/(TN+FP)
+
+eval_lr <- data.frame(Method = "Logistic Regression",
+                       Accuracy = round(acc_lr,5),
+                       Recall = round(rec_lr,5),
+                       Precision = round(prec_lr,5),
+                       Specificity = round(spec_lr,5))
+```
+
+
+# Result and Conclusion
+
+## First
+Question: What is your accuracy? Was the logistic regression better than kNN in terms of accuracy? (recall the lesson on obtaining an unbiased estimate of the model's accuracy)  
+
+Answer:
+```{r}
+rbind.data.frame(eval_knn,eval_lr)
+```
+Accuracy for KNN: 94.318%  
+Accuracy for Logistic Regression: 90.909%  
+KNN is better in terms of accuracy, precision, and specificity. But in terms of recall, Logistic Regression is better.
+
+## Second
+Question: Was the logistic regression better than our kNN model at explaining which of the variables are good predictors of a customer's industry?  
+
+Answer: Yes, we can analyze it from the summary() function
+```{r}
+summary(industry_pred_lrm)
+```
+From the result above:  
+1. 'detergents_paper' is the best (most significant) predictors of a customer's industry among the other predictors  
+2. 'grocery' is quite significant  
+3. The other predictors are not significant
+
+
+## Third
+Question: List down 1 disadvantage and 1 strength of each of the approach (kNN and logistic regression)  
+
+Answer:  
+  
+1. KNN Algorithm  
+* Strength: Robust to noisy training data, means the outlier data doesn't affect much to the output if appropriate value of k is used (insensitive to outlier).  
+* Disadvantage: It is a lazy learner, means that the algorithm doesn't learn anything from the training data and just simply compute the distance for each and every training data to predict the label of a new data, which causes high computational cost (can be slow if there are a large number of training data).
+  
+2. Logistic Regression  
+* Strength: Unlike KNN, Logistic Regression learns something from the training data, means we can know which independent variables are good predictor for our model by calculate its probability of Z-values.
+* Disadvantage: Prone to overfitting and underfitting, because it depends on how we set the threshold.
+
+### No Pain No Gain
+-- Good bye and see you again --

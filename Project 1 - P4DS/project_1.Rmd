@@ -1,0 +1,182 @@
+---
+title: "Algoritma Academy: Team BINUS University"
+author: "Even Yosua,  Handoyo Sjarif, Ridan Lukita, Tomy Tjandra"
+date: "May 2018"
+runtime: shiny
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: 
+        collapsed: false
+    theme: flatly
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Getting Started {.tabset}
+Hello! This is the result of our very first project. Here, we are using retail.csv file as our dataset. It is located in the "datasets" folder.
+
+First of all, we have to include our R Script "helper.R" inside our R Markdown in order to use the load, cleanse, and convert data function before we analyze it further. This can be achieved by using source(filename) function.
+```{r}
+source("helper.R")
+```
+
+By definition, function is a block of organized, reusable code that is used to perform a single, related action. Functions provide better modularity for your application and a high degree of code reusing. [Source](https://www.tutorialspoint.com/computer_programming/computer_programming_functions.htm)
+
+## Function 1
+loader(path) function is used to load the dataset with csv format
+```{r}
+retail.raw <- loader("datasets/retail.csv")
+```
+
+## Function 2
+cleaner(path) use the loader(path) function to load the dataset and then drop the unimportant column for our analysis, such as id. Lastly, we subset the dataset to obtain which row has a negative profit (loss).
+
+```{r}
+retail <- cleaner("datasets/retail.csv")
+```
+
+## Function 3
+convertToDate(dataset) is used to cast the column data type from character to date. In this case, we cast Order.Date and Ship.Date
+
+```{r}
+retail <- convertToDate(retail)
+retail.raw <- convertToDate(retail.raw)
+```
+
+
+# About the Data
+Let's us see the structure of our raw dataset by using str(data.frame) function.
+```{r}
+str(retail.raw)
+```
+It contains `r nrow(retail.raw)` rows by `r ncol(retail.raw)` columns of data, which have different data types:  
+* int  
+* Factor  
+* num
+
+Also, we can see the complete summary of our dataset by using summary(data.frame) function. This automatically produce statistical observation for numerical data type and row count for categorical data type.
+```{r}
+summary(retail.raw)
+```
+
+# Case 1 {.tabset}
+Suppose we are asked to compare the sales and profit increase by each year.  
+1. Is it always increasing, decreasing, or fluctuate?  
+2. Does increase in sales lead to increase in profit? 
+
+In this case, we use retail.raw because we want to look the whole data. Firstly, we need to get the list of year from Order.Date.
+```{r warning=FALSE, message=FALSE}
+library(lubridate)
+od.year <- year(retail.raw$Order.Date)
+```
+
+Then we plot the graph with od.year being the x-axis and Profit/Sales being the y-axis. 
+
+## Sales
+```{r}
+salesPerYear <- xtabs(Sales ~ od.year, retail.raw)
+plot(salesPerYear, type="b", main="Sales Per Year", xlab="Year", ylab="Sales")
+#type="b" means we use both dots and lines to draw our graph
+```
+
+## Profit
+```{r}
+profitPerYear <- xtabs(Profit ~ od.year, retail.raw)
+plot(profitPerYear, type="b", main="Profit Per Year", xlab="Year", ylab="Profit")
+#type="b" means we use both dots and lines to draw our graph
+```
+
+## Result
+1. From the graph, we can see that the profit and sales are generally increasing, except for 2015. The profit is still increasing despite of the decrease in sales. 
+2. Next, we would like to know the correlation between these two variables, which describe how strong the relationship is.
+
+```{r}
+corProfitSales <- cor(profitPerYear,salesPerYear)
+```
+
+The correlation is `r corProfitSales*100`%. In addition, this number could be more realistic if we add more data from the past years.
+
+# Case 2
+Suppose we want to know in which sub-category causing the loss in profit due to the discount. How much is the discount and the loss? How much percent of discount must be set in order to achieve profit?
+
+## Step 1: Heatmap All Transaction
+Plot the heatmap for all transaction.
+
+```{r}
+retail <- loader("datasets/retail.csv")
+profitAllTransaction <- xtabs(Profit ~ Sub.Category + Discount, retail)
+heatmap(profitAllTransaction, Colv = NA, Rowv = NA, cexCol = 0.6, scale = "column", main = "All Transaction")
+```
+
+## Step 2: Heatmap Loss Transaction
+Plot the heatmap in which the discount is causing loss. Therefore, we have to subset the row with profit < 0 using cleaner function.
+
+```{r}
+retail.lossProfit <- cleaner("datasets/retail.csv")
+lossTransaction <- xtabs(Profit ~ Sub.Category + Discount, retail.lossProfit)
+heatmap(lossTransaction, Colv = NA, Rowv = NA, cexCol = 0.6, scale = "column", main = "Loss Transactions")
+```
+
+
+## Step 3: Total Loss
+Next, we calculate the total loss for each sub-category and discount. Then sort it in descending order (from smallest to largest loss).
+
+```{r}
+totalLoss <- rowSums(lossTransaction)
+rev(sort(totalLoss))
+```
+
+
+## Step 4: Interactive Bar Chart
+
+Prepare the data to plot number of loss transaction against sub-category and the sum of loss against sub-category.
+```{r}
+subCategory <- levels(factor(retail.raw$Sub.Category))
+countLossTransaction <- table(retail.lossProfit$Sub.Category, retail.lossProfit$Discount)
+sumLossTransaction <- xtabs(Profit ~ Sub.Category + Discount, retail.lossProfit)
+```
+
+Import the library plotly to plot the graph.
+```{r warning=FALSE, message=FALSE}
+library(plotly)
+```
+
+Create dropdown list input.
+```{r}
+selectInput("discount", label = "Discount", choices = levels(factor(retail$Discount)), selected = "0.1")
+```
+
+Subset the data based on the chosen discount value and plot the graph using plotly.
+```{r echo=F}
+renderPlotly({
+  plot_ly(x = subCategory,
+          y = as.vector(countLossTransaction[, input$discount]), 
+          type = "bar")%>%
+    layout(title = "Total Transaction per Discount Given")
+  
+})
+
+renderPlotly({
+  plot_ly(
+  x = subCategory,
+  y = as.vector(sumLossTransaction[, input$discount]),
+  type = "bar"
+  )%>%
+    layout(title = "Total Loss per Discount Given")
+  
+})
+```
+
+## Result
+From the graph above, we can determine how much discount that we can give when selling a product so there is no loss in profit. 
+
+Take for example, furnishing sub-category.
+We can see at all-transaction heatmap that furnishing sub-category had sales with 0 to 80% discount, and we gave 60% discount the most. We can see that at loss transaction heatmap we have loss in profit at 60% discount. So we advice not to give 60% discount at furnishing sub-category.
+
+### No Pain No Gain
+-- Good bye and see you again --

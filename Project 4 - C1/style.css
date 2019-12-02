@@ -1,0 +1,39 @@
+em {
+    color: #306a8c;
+    margin-left: .5%;
+    margin-right: .5%;
+}
+
+.author em, .date > em {
+    color: black;
+    font-weight: normal;
+    font-style: normal;
+}
+
+.author em {
+    font-weight: bolder;
+}
+
+code > span.kw {
+	color:#54b4eb!important;
+}
+
+pre > code {
+    color: #656565;
+}
+
+pre, code {
+    background-color: #ffffff;
+}
+
+code.sourceCode.r {
+    color: black;
+}
+
+code > span.ot {
+    color: #ef6d5f;
+}
+
+code > span.st {
+    color: #ef8dd0;
+}
